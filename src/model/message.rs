@@ -1,5 +1,5 @@
-use uuid::Uuid;
 use chrono::prelude::*;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct Message {

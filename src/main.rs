@@ -1,6 +1,6 @@
-use tokio::prelude::*;
-use rusty_chat::server::Server;
 use rusty_chat::error::Result;
+use rusty_chat::server::Server;
+use tokio::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
