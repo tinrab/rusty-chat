@@ -1,24 +1,32 @@
+use std::any::Any;
+
+use futures::stream::{StreamExt, TryStreamExt};
+use futures::{future, SinkExt, TryFutureExt};
+use log::{error, info};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::{broadcast, mpsc};
+use tokio::time;
+
 use crate::client::Client;
 use crate::error::{Error, Result};
-use futures::{future, SinkExt};
-use futures::stream::{StreamExt, TryStreamExt};
-use log::{info, error};
-use std::any::Any;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::time;
-use tokio::sync::{broadcast, mpsc};
-use tokio::sync::mpsc::{UnboundedSender, UnboundedReceiver};
-use crate::proto::InputMessage;
+use crate::proto::{InputMessage, Output, OutputMessage};
 
 const ALIVE_INTERVAL: time::Duration = time::Duration::from_secs(1);
+const OUTPUT_CHANNEL_SIZE: usize = 3;
 
 pub struct Server {
     port: u16,
+    output_sender: broadcast::Sender<OutputMessage>,
 }
 
 impl Server {
     pub fn new(port: u16) -> Self {
-        Server { port }
+        let (output_sender, _) = broadcast::channel(OUTPUT_CHANNEL_SIZE);
+        Server {
+            port,
+            output_sender,
+        }
     }
 
     pub async fn run(&self) -> Result<()> {
@@ -50,7 +58,11 @@ impl Server {
         let mut interval = time::interval(ALIVE_INTERVAL);
         loop {
             interval.tick().await;
-            // println!("TICK");
+            if self.output_sender.receiver_count() > 0 {
+                self.output_sender
+                    .send(OutputMessage::new(Output::Alive))
+                    .unwrap();
+            }
         }
     }
 
@@ -60,19 +72,37 @@ impl Server {
         }
     }
 
-    async fn handle_connection(&self, stream: TcpStream, input_sender: UnboundedSender<InputMessage>) -> Result<()> {
+    async fn handle_connection(
+        &self,
+        stream: TcpStream,
+        input_sender: UnboundedSender<InputMessage>,
+    ) -> Result<()> {
         let ws = tokio_tungstenite::accept_async(stream).await?;
+        let output_stream = self.output_sender.subscribe();
 
         tokio::spawn(async move {
             let (mut ws_sink, ws_stream) = ws.split();
             let client = Client::new();
             info!("Client {} connected", client.id());
 
-            if let Err(err) = client.read_input(ws_stream).try_for_each(|input_message| async {
-                input_sender.send(input_message).unwrap();
-                Ok(())
-            }).await {
-                error!("Failed to read input: {}", err);
+            let reading = client
+                .read_input(ws_stream)
+                .try_for_each(|input_message| async {
+                    input_sender
+                        .send(input_message)
+                        .map_err(|err| Error::System(err.to_string()))
+                });
+
+            let writing = client
+                .write_output(output_stream.into_stream())
+                .forward(ws_sink)
+                .map_err(|err| Error::WebSocket(err));
+
+            if let Err(err) = tokio::select! {
+                result = reading => result,
+                result = writing => result,
+            } {
+                error!("Client connection error: {}", err);
             }
 
             info!("Client {} disconnected", client.id());

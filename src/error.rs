@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::{error, io};
 use std::{fmt, result};
 
@@ -7,13 +6,15 @@ use tokio_tungstenite::tungstenite;
 
 #[derive(Debug)]
 pub enum Error {
+    System(String),
     Io(io::Error),
     WebSocket(tungstenite::Error),
 }
 
-impl Display for Error {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Error::System(err) => write!(f, "system error: {}", err),
             Error::Io(ref err) => write!(f, "IO error: {}", err),
             Error::WebSocket(ref err) => write!(f, "WebSocket error: {}", err),
         }
