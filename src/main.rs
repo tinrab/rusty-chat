@@ -1,11 +1,13 @@
-use rusty_chat::error::Result;
+use log::error;
+
 use rusty_chat::server::Server;
-use tokio::prelude::*;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
     env_logger::init();
 
     let server = Server::new(8080);
-    server.run().await
+    if let Err(err) = server.run().await {
+        error!("{}", err);
+    }
 }

@@ -1,20 +1,16 @@
-use std::pin::Pin;
-use std::{error, fmt, io, result};
+use std::{error, result};
 
-use futures::stream::{SplitSink, SplitStream};
-use futures::{
-    future, FutureExt, SinkExt, Stream, StreamExt, TryFutureExt, TryStream, TryStreamExt,
-};
+use futures::stream::SplitStream;
+use futures::{future, Stream, StreamExt, TryStream, TryStreamExt};
 use log::error;
 use tokio::net::TcpStream;
-use tokio::sync::broadcast;
-use tokio::sync::mpsc::UnboundedSender;
 use tokio_tungstenite::{tungstenite, WebSocketStream};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::proto::{Input, InputMessage, Output, OutputMessage, SendInput};
+use crate::proto::{Input, InputMessage, OutputMessage, SendInput};
 
+#[derive(Copy)]
 pub struct Client {
     id: Uuid,
 }
@@ -32,7 +28,7 @@ impl Client {
         &self,
         stream: SplitStream<WebSocketStream<TcpStream>>,
     ) -> impl Stream<Item = Result<InputMessage>> {
-        let client_id = self.id.clone();
+        let client_id = self.id;
         stream
             .take_while(|message| {
                 future::ready(if let Ok(message) = message {
@@ -62,7 +58,7 @@ impl Client {
             + Stream<Item = result::Result<OutputMessage, E>>,
         E: error::Error,
     {
-        let client_id = self.id.clone();
+        let client_id = self.id;
         stream
             .try_filter(move |output_message| future::ready(output_message.is_target(client_id)))
             .map_ok(|output_message| {
