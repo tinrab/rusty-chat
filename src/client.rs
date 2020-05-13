@@ -8,7 +8,7 @@ use tokio_tungstenite::{tungstenite, WebSocketStream};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::proto::{Input, InputMessage, OutputMessage, PostInput};
+use crate::proto::{Input, InputParcel, OutputParcel, PostInput};
 
 #[derive(Clone, Copy)]
 pub struct Client {
@@ -23,7 +23,7 @@ impl Client {
     pub fn read_input(
         &self,
         stream: SplitStream<WebSocketStream<TcpStream>>,
-    ) -> impl Stream<Item = Result<InputMessage>> {
+    ) -> impl Stream<Item = Result<InputParcel>> {
         let client_id = self.id;
         stream
             .take_while(|message| {
@@ -38,7 +38,7 @@ impl Client {
                 Ok(message) => {
                     let data = message.to_text().unwrap().trim();
                     let input = serde_json::from_str(data)?;
-                    Ok(InputMessage::new(client_id, input))
+                    Ok(InputParcel::new(client_id, input))
                 }
             })
     }
@@ -48,15 +48,14 @@ impl Client {
         stream: S,
     ) -> impl Stream<Item = tungstenite::Result<tungstenite::Message>>
     where
-        S: TryStream<Ok = OutputMessage, Error = E>
-            + Stream<Item = result::Result<OutputMessage, E>>,
+        S: TryStream<Ok = OutputParcel, Error = E> + Stream<Item = result::Result<OutputParcel, E>>,
         E: error::Error,
     {
         let client_id = self.id;
         stream
-            .try_filter(move |output_message| future::ready(output_message.is_target(client_id)))
-            .map_ok(|output_message| {
-                let data = serde_json::to_string(&output_message.output).unwrap();
+            .try_filter(move |output_parcel| future::ready(output_parcel.is_target(client_id)))
+            .map_ok(|output_parcel| {
+                let data = serde_json::to_string(&output_parcel.output).unwrap();
                 tungstenite::Message::text(data)
             })
             .map_err(|err| {

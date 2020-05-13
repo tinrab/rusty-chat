@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -19,6 +20,8 @@ pub enum Output {
     Alive,
     #[serde(rename = "joined")]
     Joined(JoinedOutput),
+    #[serde(rename = "user-joined")]
+    UserJoined(UserJoinedOutput),
     #[serde(rename = "posted")]
     Posted(PostedOutput),
 }
@@ -33,27 +36,27 @@ pub enum OutputError {
 }
 
 #[derive(Debug, Clone)]
-pub struct InputMessage {
+pub struct InputParcel {
     pub client_id: Uuid,
     pub input: Input,
 }
 
-impl InputMessage {
+impl InputParcel {
     pub fn new(client_id: Uuid, input: Input) -> Self {
-        InputMessage { client_id, input }
+        InputParcel { client_id, input }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct OutputMessage {
+pub struct OutputParcel {
     pub output: Output,
     pub target_client_id: Option<Uuid>,
     pub ignored_client_id: Option<Uuid>,
 }
 
-impl OutputMessage {
+impl OutputParcel {
     pub fn new(output: Output) -> Self {
-        OutputMessage {
+        OutputParcel {
             output,
             target_client_id: None,
             ignored_client_id: None,
@@ -61,7 +64,7 @@ impl OutputMessage {
     }
 
     pub fn new_target(client_id: Uuid, output: Output) -> Self {
-        OutputMessage {
+        OutputParcel {
             output,
             target_client_id: Some(client_id),
             ignored_client_id: None,
@@ -69,7 +72,7 @@ impl OutputMessage {
     }
 
     pub fn new_ignored(client_id: Uuid, output: Output) -> Self {
-        OutputMessage {
+        OutputParcel {
             output,
             target_client_id: None,
             ignored_client_id: Some(client_id),
@@ -82,7 +85,7 @@ impl OutputMessage {
     }
 }
 
-// {"type":"join","payload":{"name":"John"}}
+// {"type":"join","payload":{"name":"UserC"}}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JoinInput {
@@ -98,20 +101,74 @@ pub struct PostInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct JoinedOutput {
-    pub user_id: Uuid,
+pub struct UserOutput {
+    pub id: Uuid,
+    pub name: String,
 }
 
-impl JoinedOutput {
-    pub fn new(user_id: Uuid) -> Self {
-        JoinedOutput { user_id }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageOutput {
+    pub id: Uuid,
+    pub user: UserOutput,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinedOutput {
+    pub user_id: Uuid,
+    pub others: Vec<UserOutput>,
+    pub messages: Vec<MessageOutput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserJoinedOutput {
+    pub user: UserOutput,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PostedOutput {
     pub body: String,
+}
+
+impl UserOutput {
+    pub fn new(id: Uuid, name: &str) -> Self {
+        UserOutput {
+            id,
+            name: String::from(name),
+        }
+    }
+}
+
+impl MessageOutput {
+    pub fn new(id: Uuid, user: UserOutput, body: &str, created_at: DateTime<Utc>) -> Self {
+        MessageOutput {
+            id,
+            user,
+            body: String::from(body),
+            created_at,
+        }
+    }
+}
+
+impl JoinedOutput {
+    pub fn new(user_id: Uuid, others: Vec<UserOutput>, messages: Vec<MessageOutput>) -> Self {
+        JoinedOutput {
+            user_id,
+            others,
+            messages,
+        }
+    }
+}
+
+impl UserJoinedOutput {
+    pub fn new(user: UserOutput) -> Self {
+        UserJoinedOutput { user }
+    }
 }
 
 impl PostedOutput {

@@ -8,7 +8,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::client::Client;
 use crate::error::{Error, Result};
 use crate::hub::Hub;
-use crate::proto::{Input, InputMessage};
+use crate::proto::{Input, InputParcel};
 
 pub struct Server {
     port: u16,
@@ -24,7 +24,7 @@ impl Server {
     }
 
     pub async fn run(&self) -> Result<()> {
-        let (input_sender, input_receiver) = mpsc::unbounded_channel::<InputMessage>();
+        let (input_sender, input_receiver) = mpsc::unbounded_channel::<InputParcel>();
 
         let hub = self.hub.run(input_receiver);
         let listening = self.listen(input_sender);
@@ -32,7 +32,7 @@ impl Server {
         tokio::try_join!(listening, hub).map(|result| result.0)
     }
 
-    async fn listen(&self, input_sender: UnboundedSender<InputMessage>) -> Result<()> {
+    async fn listen(&self, input_sender: UnboundedSender<InputParcel>) -> Result<()> {
         let mut listener = TcpListener::bind(format!("127.0.0.1:{}", self.port)).await?;
         info!("Running on port {}...", self.port);
 
@@ -48,7 +48,7 @@ impl Server {
     async fn handle_connection(
         &self,
         stream: TcpStream,
-        input_sender: UnboundedSender<InputMessage>,
+        input_sender: UnboundedSender<InputParcel>,
     ) -> Result<()> {
         let ws = tokio_tungstenite::accept_async(stream).await?;
         let output_receiver = self.hub.subscribe();
@@ -61,8 +61,8 @@ impl Server {
 
             let reading = client
                 .read_input(ws_stream)
-                .try_for_each(|input_message| async {
-                    input_sender.send(input_message).unwrap();
+                .try_for_each(|input_parcel| async {
+                    input_sender.send(input_parcel).unwrap();
                     Ok(())
                 });
 
