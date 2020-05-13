@@ -2,46 +2,53 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "payload")]
+#[serde(tag = "type", content = "payload", rename_all = "camelCase")]
 pub enum Input {
-    #[serde(rename = "connected")]
-    Connected,
-    #[serde(rename = "send")]
-    Send(SendInput),
+    #[serde(rename = "join")]
+    Join(JoinInput),
+    #[serde(rename = "post")]
+    Post(PostInput),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum Output {
+    #[serde(rename = "error")]
+    Error(OutputError),
     #[serde(rename = "alive")]
     Alive,
+    #[serde(rename = "joined")]
+    Joined(JoinedOutput),
+    #[serde(rename = "posted")]
+    Posted(PostedOutput),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "code", rename_all = "camelCase")]
+pub enum OutputError {
+    NameTaken,
+    InvalidName,
+    NotJoined,
+    InvalidMessageBody,
 }
 
 #[derive(Debug, Clone)]
 pub struct InputMessage {
-    client_id: Uuid,
-    input: Input,
+    pub client_id: Uuid,
+    pub input: Input,
 }
 
 impl InputMessage {
     pub fn new(client_id: Uuid, input: Input) -> Self {
         InputMessage { client_id, input }
     }
-
-    pub fn client_id(&self) -> &Uuid {
-        &self.client_id
-    }
-
-    pub fn input(&self) -> &Input {
-        &self.input
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct OutputMessage {
-    output: Output,
-    target_client_id: Option<Uuid>,
-    ignored_client_id: Option<Uuid>,
+    pub output: Output,
+    pub target_client_id: Option<Uuid>,
+    pub ignored_client_id: Option<Uuid>,
 }
 
 impl OutputMessage {
@@ -73,20 +80,43 @@ impl OutputMessage {
         Some(client_id) == self.target_client_id
             || self.target_client_id.is_none() && Some(client_id) != self.ignored_client_id
     }
+}
 
-    pub fn output(&self) -> &Output {
-        &self.output
+// {"type":"join","payload":{"name":"John"}}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinInput {
+    pub name: String,
+}
+
+// {"type":"post","payload":{"body":"Hey!"}}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostInput {
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinedOutput {
+    pub user_id: Uuid,
+}
+
+impl JoinedOutput {
+    pub fn new(user_id: Uuid) -> Self {
+        JoinedOutput { user_id }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SendInput {
-    body: String,
+#[serde(rename_all = "camelCase")]
+pub struct PostedOutput {
+    pub body: String,
 }
 
-impl SendInput {
+impl PostedOutput {
     pub fn new(body: &str) -> Self {
-        SendInput {
+        PostedOutput {
             body: String::from(body),
         }
     }

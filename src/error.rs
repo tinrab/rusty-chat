@@ -9,6 +9,7 @@ pub enum Error {
     System(String),
     Io(io::Error),
     WebSocket(tungstenite::Error),
+    Message(serde_json::Error),
 }
 
 impl fmt::Display for Error {
@@ -17,6 +18,7 @@ impl fmt::Display for Error {
             Error::System(err) => write!(f, "system error: {}", err),
             Error::Io(ref err) => write!(f, "IO error: {}", err),
             Error::WebSocket(ref err) => write!(f, "WebSocket error: {}", err),
+            Error::Message(ref err) => write!(f, "Invalid message: {}", err),
         }
     }
 }
@@ -32,6 +34,12 @@ impl From<io::Error> for Error {
 impl From<tungstenite::Error> for Error {
     fn from(err: tungstenite::Error) -> Self {
         Error::WebSocket(err)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Error::Message(err)
     }
 }
 

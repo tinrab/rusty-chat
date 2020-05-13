@@ -8,7 +8,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::client::Client;
 use crate::error::{Error, Result};
 use crate::hub::Hub;
-use crate::proto::InputMessage;
+use crate::proto::{Input, InputMessage};
 
 pub struct Server {
     port: u16,
@@ -24,13 +24,15 @@ impl Server {
     }
 
     pub async fn run(&self) -> Result<()> {
-        let (input_sender, input_receiver) = mpsc::unbounded_channel();
-        let hub = self.hub.run(input_receiver.into_stream());
+        let (input_sender, input_receiver) = mpsc::unbounded_channel::<InputMessage>();
+
+        let hub = self.hub.run(input_receiver);
         let listening = self.listen(input_sender);
+
         tokio::try_join!(listening, hub).map(|result| result.0)
     }
 
-    async fn listen(&self, input_sender: UnboundedSender<Result<InputMessage>>) -> Result<()> {
+    async fn listen(&self, input_sender: UnboundedSender<InputMessage>) -> Result<()> {
         let mut listener = TcpListener::bind(format!("127.0.0.1:{}", self.port)).await?;
         info!("Running on port {}...", self.port);
 
@@ -46,7 +48,7 @@ impl Server {
     async fn handle_connection(
         &self,
         stream: TcpStream,
-        input_sender: UnboundedSender<Result<InputMessage>>,
+        input_sender: UnboundedSender<InputMessage>,
     ) -> Result<()> {
         let ws = tokio_tungstenite::accept_async(stream).await?;
         let output_receiver = self.hub.subscribe();
@@ -54,12 +56,13 @@ impl Server {
         tokio::spawn(async move {
             let (ws_sink, ws_stream) = ws.split();
             let client = Client::new();
-            info!("Client {} connected", client.id());
+
+            info!("Client {} connected", client.id);
 
             let reading = client
                 .read_input(ws_stream)
                 .try_for_each(|input_message| async {
-                    input_sender.send(Ok(input_message)).unwrap();
+                    input_sender.send(input_message).unwrap();
                     Ok(())
                 });
 
@@ -73,10 +76,9 @@ impl Server {
                 result = writing => result,
             } {
                 error!("Client connection error: {}", err);
-                input_sender.send(Err(err)).unwrap();
             }
 
-            info!("Client {} disconnected", client.id());
+            info!("Client {} disconnected", client.id);
         });
 
         Ok(())

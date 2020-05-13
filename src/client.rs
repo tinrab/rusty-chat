@@ -8,20 +8,16 @@ use tokio_tungstenite::{tungstenite, WebSocketStream};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::proto::{Input, InputMessage, OutputMessage, SendInput};
+use crate::proto::{Input, InputMessage, OutputMessage, PostInput};
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 pub struct Client {
-    id: Uuid,
+    pub id: Uuid,
 }
 
 impl Client {
     pub fn new() -> Self {
         Client { id: Uuid::new_v4() }
-    }
-
-    pub fn id(&self) -> &Uuid {
-        &self.id
     }
 
     pub fn read_input(
@@ -41,10 +37,8 @@ impl Client {
                 Err(err) => Err(Error::WebSocket(err)),
                 Ok(message) => {
                     let data = message.to_text().unwrap().trim();
-                    Ok(InputMessage::new(
-                        client_id,
-                        Input::Send(SendInput::new(data)),
-                    ))
+                    let input = serde_json::from_str(data)?;
+                    Ok(InputMessage::new(client_id, input))
                 }
             })
     }
@@ -62,7 +56,7 @@ impl Client {
         stream
             .try_filter(move |output_message| future::ready(output_message.is_target(client_id)))
             .map_ok(|output_message| {
-                let data = serde_json::to_string(output_message.output()).unwrap();
+                let data = serde_json::to_string(&output_message.output).unwrap();
                 tungstenite::Message::text(data)
             })
             .map_err(|err| {
