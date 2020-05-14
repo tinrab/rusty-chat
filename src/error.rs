@@ -1,5 +1,4 @@
-use std::{error, io};
-use std::{fmt, result};
+use std::{error, fmt, io, result};
 
 use serde::export::Formatter;
 use tokio_tungstenite::tungstenite;

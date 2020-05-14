@@ -22,11 +22,13 @@ pub enum Output {
     Joined(JoinedOutput),
     #[serde(rename = "user-joined")]
     UserJoined(UserJoinedOutput),
-    #[serde(rename = "posted")]
-    Posted(PostedOutput),
+    #[serde(rename = "user-left")]
+    UserLeft(UserLeftOutput),
+    #[serde(rename = "user-posted")]
+    UserPosted(UserPostedOutput),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum OutputError {
     NameTaken,
@@ -49,50 +51,22 @@ impl InputParcel {
 
 #[derive(Debug, Clone)]
 pub struct OutputParcel {
+    pub client_id: Uuid,
     pub output: Output,
-    pub target_client_id: Option<Uuid>,
-    pub ignored_client_id: Option<Uuid>,
 }
 
 impl OutputParcel {
-    pub fn new(output: Output) -> Self {
-        OutputParcel {
-            output,
-            target_client_id: None,
-            ignored_client_id: None,
-        }
-    }
-
-    pub fn new_target(client_id: Uuid, output: Output) -> Self {
-        OutputParcel {
-            output,
-            target_client_id: Some(client_id),
-            ignored_client_id: None,
-        }
-    }
-
-    pub fn new_ignored(client_id: Uuid, output: Output) -> Self {
-        OutputParcel {
-            output,
-            target_client_id: None,
-            ignored_client_id: Some(client_id),
-        }
-    }
-
-    pub fn is_target(&self, client_id: Uuid) -> bool {
-        Some(client_id) == self.target_client_id
-            || self.target_client_id.is_none() && Some(client_id) != self.ignored_client_id
+    pub fn new(client_id: Uuid, output: Output) -> Self {
+        OutputParcel { client_id, output }
     }
 }
 
-// {"type":"join","payload":{"name":"UserC"}}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JoinInput {
     pub name: String,
 }
 
-// {"type":"post","payload":{"body":"Hey!"}}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PostInput {
@@ -129,10 +103,16 @@ pub struct UserJoinedOutput {
     pub user: UserOutput,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserLeftOutput {
+    pub user_id: Uuid,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PostedOutput {
-    pub body: String,
+pub struct UserPostedOutput {
+    pub message: MessageOutput,
 }
 
 impl UserOutput {
@@ -171,10 +151,14 @@ impl UserJoinedOutput {
     }
 }
 
-impl PostedOutput {
-    pub fn new(body: &str) -> Self {
-        PostedOutput {
-            body: String::from(body),
-        }
+impl UserLeftOutput {
+    pub fn new(user_id: Uuid) -> Self {
+        UserLeftOutput { user_id }
+    }
+}
+
+impl UserPostedOutput {
+    pub fn new(message: MessageOutput) -> Self {
+        UserPostedOutput { message }
     }
 }

@@ -8,9 +8,9 @@ use tokio_tungstenite::{tungstenite, WebSocketStream};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
-use crate::proto::{Input, InputParcel, OutputParcel, PostInput};
+use crate::proto::{InputParcel, OutputParcel};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Client {
     pub id: Uuid,
 }
@@ -26,6 +26,7 @@ impl Client {
     ) -> impl Stream<Item = Result<InputParcel>> {
         let client_id = self.id;
         stream
+            // Take only text messages
             .take_while(|message| {
                 future::ready(if let Ok(message) = message {
                     message.is_text()
@@ -33,6 +34,7 @@ impl Client {
                     false
                 })
             })
+            // Deserialize JSON messages into proto::Input
             .map(move |message| match message {
                 Err(err) => Err(Error::WebSocket(err)),
                 Ok(message) => {
@@ -53,7 +55,9 @@ impl Client {
     {
         let client_id = self.id;
         stream
-            .try_filter(move |output_parcel| future::ready(output_parcel.is_target(client_id)))
+            // Skip irrelevant parcels
+            .try_filter(move |output_parcel| future::ready(output_parcel.client_id == client_id))
+            // Serialize to JSON
             .map_ok(|output_parcel| {
                 let data = serde_json::to_string(&output_parcel.output).unwrap();
                 tungstenite::Message::text(data)

@@ -1,5 +1,3 @@
-use std::hash::{Hash, Hasher};
-
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]

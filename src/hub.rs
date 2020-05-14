@@ -1,9 +1,8 @@
-use std::borrow::BorrowMut;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::time::Duration;
 
 use chrono::Utc;
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::StreamExt;
 use regex::Regex;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::{broadcast, RwLock};
@@ -16,11 +15,11 @@ use crate::model::message::Message;
 use crate::model::user::User;
 use crate::proto::{
     Input, InputParcel, JoinInput, JoinedOutput, MessageOutput, Output, OutputError, OutputParcel,
-    PostInput, PostedOutput, UserJoinedOutput, UserOutput,
+    PostInput, UserJoinedOutput, UserLeftOutput, UserOutput, UserPostedOutput,
 };
 
 const OUTPUT_CHANNEL_SIZE: usize = 16;
-const ALIVE_INTERVAL: time::Duration = time::Duration::from_secs(5);
+const ALIVE_INTERVAL: Duration = Duration::from_secs(5);
 lazy_static! {
     static ref USER_NAME_REGEX: Regex = Regex::new("[A-Za-z\\s]{4,24}").unwrap();
 }
@@ -56,6 +55,14 @@ impl Hub {
         self.output_sender.subscribe()
     }
 
+    pub async fn on_disconnect(&self, client_id: Uuid) {
+        // Remove user on disconnect
+        if self.users.write().await.remove(&client_id).is_some() {
+            self.send_ignored(client_id, Output::UserLeft(UserLeftOutput::new(client_id)))
+                .await;
+        }
+    }
+
     async fn process(&self, input_parcel: InputParcel) {
         match input_parcel.input {
             Input::Join(input) => self.process_join(input_parcel.client_id, input).await,
@@ -64,26 +71,37 @@ impl Hub {
     }
 
     async fn process_join(&self, client_id: Uuid, input: JoinInput) {
-        let mut users = self.users.write().await;
-        if users.values().any(|user| user.name == input.name) {
+        let user_name = input.name.trim();
+
+        // Check if user's name is taken
+        if self
+            .users
+            .read()
+            .await
+            .values()
+            .any(|user| user.name == user_name)
+        {
             self.send_error(client_id, OutputError::NameTaken);
             return;
         }
 
-        let user_name = input.name.trim();
+        // Validate user name
         if !USER_NAME_REGEX.is_match(user_name) {
             self.send_error(client_id, OutputError::InvalidName);
             return;
         }
 
         let user = User::new(client_id, user_name);
-        users.insert(client_id, user.clone());
+        self.users.write().await.insert(client_id, user.clone());
 
-        self.send(OutputParcel::new_target(
+        // Report success to user
+        self.send_targeted(
             client_id,
             Output::Joined(JoinedOutput::new(
                 client_id,
-                users
+                self.users
+                    .read()
+                    .await
                     .values()
                     .map(|user| UserOutput::new(user.id, &user.name))
                     .collect(),
@@ -101,14 +119,17 @@ impl Hub {
                     })
                     .collect(),
             )),
-        ));
-        self.send(OutputParcel::new_ignored(
+        );
+        // Notify others that someone joined
+        self.send_ignored(
             client_id,
             Output::UserJoined(UserJoinedOutput::new(UserOutput::new(client_id, user_name))),
-        ))
+        )
+        .await;
     }
 
     async fn process_send(&self, client_id: Uuid, input: PostInput) {
+        // Verify that user exists
         let user = if let Some(user) = self.users.read().await.get(&client_id) {
             user.clone()
         } else {
@@ -116,34 +137,77 @@ impl Hub {
             return;
         };
 
-        if input.body.len() == 0 || input.body.len() > 256 {
+        // Validate message body
+        if input.body.is_empty() || input.body.len() > 256 {
             self.send_error(client_id, OutputError::InvalidMessageBody);
             return;
         }
 
         let message = Message::new(Uuid::new_v4(), user.clone(), &input.body, Utc::now());
-        self.feed.write().await.add_message(message);
+        self.feed.write().await.add_message(message.clone());
 
-        self.send(OutputParcel::new(Output::Posted(PostedOutput::new(
-            &input.body,
-        ))));
+        // Notify everybody about new message
+        self.send(Output::UserPosted(UserPostedOutput::new(
+            MessageOutput::new(
+                message.id,
+                UserOutput::new(user.id, &user.name),
+                &message.body,
+                message.created_at,
+            ),
+        )))
+        .await;
     }
 
     async fn tick_alive(&self) {
         let mut interval = time::interval(ALIVE_INTERVAL);
         loop {
             interval.tick().await;
-            self.send(OutputParcel::new(Output::Alive))
+            self.send(Output::Alive).await;
         }
     }
 
-    fn send(&self, message: OutputParcel) {
-        if self.output_sender.receiver_count() > 0 {
-            self.output_sender.send(message).unwrap();
+    async fn send(&self, output: Output) {
+        if self.output_sender.receiver_count() == 0 {
+            return;
         }
+        self.users.read().await.keys().for_each(|user_id| {
+            self.output_sender
+                .send(OutputParcel::new(*user_id, output.clone()))
+                .unwrap();
+        });
+    }
+
+    fn send_targeted(&self, client_id: Uuid, output: Output) {
+        if self.output_sender.receiver_count() > 0 {
+            self.output_sender
+                .send(OutputParcel::new(client_id, output))
+                .unwrap();
+        }
+    }
+
+    async fn send_ignored(&self, ignored_client_id: Uuid, output: Output) {
+        if self.output_sender.receiver_count() == 0 {
+            return;
+        }
+        self.users
+            .read()
+            .await
+            .values()
+            .filter(|user| user.id != ignored_client_id)
+            .for_each(|user| {
+                self.output_sender
+                    .send(OutputParcel::new(user.id, output.clone()))
+                    .unwrap();
+            });
     }
 
     fn send_error(&self, client_id: Uuid, error: OutputError) {
-        self.send(OutputParcel::new_target(client_id, Output::Error(error)));
+        self.send_targeted(client_id, Output::Error(error));
+    }
+}
+
+impl Default for Hub {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use futures::stream::{StreamExt, TryStreamExt};
 use futures::TryFutureExt;
 use log::{error, info};
@@ -8,28 +10,28 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::client::Client;
 use crate::error::{Error, Result};
 use crate::hub::Hub;
-use crate::proto::{Input, InputParcel};
+use crate::proto::InputParcel;
 
 pub struct Server {
     port: u16,
-    hub: Hub,
+    hub: Arc<Hub>,
 }
 
 impl Server {
     pub fn new(port: u16) -> Self {
         Server {
             port,
-            hub: Hub::new(),
+            hub: Arc::new(Hub::new()),
         }
     }
 
     pub async fn run(&self) -> Result<()> {
         let (input_sender, input_receiver) = mpsc::unbounded_channel::<InputParcel>();
 
-        let hub = self.hub.run(input_receiver);
+        let running_hub = self.hub.run(input_receiver);
         let listening = self.listen(input_sender);
 
-        tokio::try_join!(listening, hub).map(|result| result.0)
+        tokio::try_join!(listening, running_hub).map(|result| result.0)
     }
 
     async fn listen(&self, input_sender: UnboundedSender<InputParcel>) -> Result<()> {
@@ -52,6 +54,7 @@ impl Server {
     ) -> Result<()> {
         let ws = tokio_tungstenite::accept_async(stream).await?;
         let output_receiver = self.hub.subscribe();
+        let hub = self.hub.clone();
 
         tokio::spawn(async move {
             let (ws_sink, ws_stream) = ws.split();
@@ -78,6 +81,7 @@ impl Server {
                 error!("Client connection error: {}", err);
             }
 
+            hub.on_disconnect(client.id).await;
             info!("Client {} disconnected", client.id);
         });
 
