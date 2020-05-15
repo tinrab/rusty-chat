@@ -24,16 +24,21 @@ pub enum Output {
     UserJoined(UserJoinedOutput),
     #[serde(rename = "user-left")]
     UserLeft(UserLeftOutput),
+    #[serde(rename = "posted")]
+    Posted(PostedOutput),
     #[serde(rename = "user-posted")]
     UserPosted(UserPostedOutput),
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(tag = "code", rename_all = "camelCase")]
 pub enum OutputError {
+    #[serde(rename = "name-taken")]
     NameTaken,
+    #[serde(rename = "invalid-name")]
     InvalidName,
+    #[serde(rename = "not-joined")]
     NotJoined,
+    #[serde(rename = "invalid-message-body")]
     InvalidMessageBody,
 }
 
@@ -109,6 +114,12 @@ pub struct UserLeftOutput {
     pub user_id: Uuid,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostedOutput {
+    pub message_id: Uuid,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserPostedOutput {
@@ -154,6 +165,12 @@ impl UserJoinedOutput {
 impl UserLeftOutput {
     pub fn new(user_id: Uuid) -> Self {
         UserLeftOutput { user_id }
+    }
+}
+
+impl PostedOutput {
+    pub fn new(message_id: Uuid) -> Self {
+        PostedOutput { message_id }
     }
 }
 

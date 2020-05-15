@@ -15,11 +15,12 @@ use crate::model::message::Message;
 use crate::model::user::User;
 use crate::proto::{
     Input, InputParcel, JoinInput, JoinedOutput, MessageOutput, Output, OutputError, OutputParcel,
-    PostInput, UserJoinedOutput, UserLeftOutput, UserOutput, UserPostedOutput,
+    PostInput, PostedOutput, UserJoinedOutput, UserLeftOutput, UserOutput, UserPostedOutput,
 };
 
 const OUTPUT_CHANNEL_SIZE: usize = 16;
 const ALIVE_INTERVAL: Duration = Duration::from_secs(5);
+const MAX_MESSAGE_BODY_LENGTH: usize = 256;
 lazy_static! {
     static ref USER_NAME_REGEX: Regex = Regex::new("[A-Za-z\\s]{4,24}").unwrap();
 }
@@ -95,30 +96,36 @@ impl Hub {
         self.users.write().await.insert(client_id, user.clone());
 
         // Report success to user
+        let other_users = self
+            .users
+            .read()
+            .await
+            .values()
+            .filter_map(|user| {
+                if user.id != client_id {
+                    Some(UserOutput::new(user.id, &user.name))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let messages = self
+            .feed
+            .read()
+            .await
+            .messages_iter()
+            .map(|message| {
+                MessageOutput::new(
+                    message.id,
+                    UserOutput::new(message.user.id, &message.user.name),
+                    &message.body,
+                    message.created_at,
+                )
+            })
+            .collect();
         self.send_targeted(
             client_id,
-            Output::Joined(JoinedOutput::new(
-                client_id,
-                self.users
-                    .read()
-                    .await
-                    .values()
-                    .map(|user| UserOutput::new(user.id, &user.name))
-                    .collect(),
-                self.feed
-                    .read()
-                    .await
-                    .messages_iter()
-                    .map(|message| {
-                        MessageOutput::new(
-                            message.id,
-                            UserOutput::new(message.user.id, &message.user.name),
-                            &message.body,
-                            message.created_at,
-                        )
-                    })
-                    .collect(),
-            )),
+            Output::Joined(JoinedOutput::new(client_id, other_users, messages)),
         );
         // Notify others that someone joined
         self.send_ignored(
@@ -138,7 +145,7 @@ impl Hub {
         };
 
         // Validate message body
-        if input.body.is_empty() || input.body.len() > 256 {
+        if input.body.is_empty() || input.body.len() > MAX_MESSAGE_BODY_LENGTH {
             self.send_error(client_id, OutputError::InvalidMessageBody);
             return;
         }
@@ -146,15 +153,22 @@ impl Hub {
         let message = Message::new(Uuid::new_v4(), user.clone(), &input.body, Utc::now());
         self.feed.write().await.add_message(message.clone());
 
+        let message_output = MessageOutput::new(
+            message.id,
+            UserOutput::new(user.id, &user.name),
+            &message.body,
+            message.created_at,
+        );
+        // Report post status
+        self.send_targeted(
+            client_id,
+            Output::Posted(PostedOutput::new(message_output.id)),
+        );
         // Notify everybody about new message
-        self.send(Output::UserPosted(UserPostedOutput::new(
-            MessageOutput::new(
-                message.id,
-                UserOutput::new(user.id, &user.name),
-                &message.body,
-                message.created_at,
-            ),
-        )))
+        self.send_ignored(
+            client_id,
+            Output::UserPosted(UserPostedOutput::new(message_output)),
+        )
         .await;
     }
 

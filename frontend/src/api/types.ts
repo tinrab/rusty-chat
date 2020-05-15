@@ -1,3 +1,20 @@
+export enum ApiActionType {
+    Write = 'write',
+    Read = 'read',
+}
+
+export type WriteApiAction = {
+    type: ApiActionType.Write;
+    payload: Input;
+};
+
+export type ReadApiAction = {
+    type: ApiActionType.Read;
+    payload: Output;
+};
+
+export type ApiAction = WriteApiAction | ReadApiAction;
+
 export enum InputType {
     Join = 'join',
     Post = 'post',
@@ -21,15 +38,21 @@ export enum OutputType {
     Joined = 'joined',
     UserJoined = 'user-joined',
     UserLeft = 'user-left',
+    Posted = 'posted',
     UserPosted = 'user-posted',
 }
 
 export enum OutputError {
-    NameTaken = 'NameTaken',
-    InvalidName = 'InvalidName',
-    NotJoined = 'NotJoined',
-    InvalidMessageBody = 'InvalidMessageBody',
+    NameTaken = 'name-taken',
+    InvalidName = 'invalid-name',
+    NotJoined = 'not-joined',
+    InvalidMessageBody = 'invalid-message-body',
 }
+
+export type OutputResult<T> = T & { error: false } | {
+    error: true;
+    code: OutputError;
+};
 
 export type UserOutput = {
     id: string;
@@ -40,7 +63,7 @@ export type MessageOutput = {
     id: string;
     user: UserOutput;
     body: string;
-    created_at: Date,
+    createdAt: Date,
 };
 
 export type ErrorOutput = {
@@ -54,24 +77,39 @@ export type AliveOutput = {
 
 export type JoinedOutput = {
     type: OutputType.Joined;
-    userId: string;
-    others: UserOutput[];
-    messages: MessageOutput[];
+    payload: {
+        userId: string;
+        others: UserOutput[];
+        messages: MessageOutput[];
+    };
 };
 
 export type UserJoinedOutput = {
     type: OutputType.UserJoined;
-    user: UserOutput;
+    payload: {
+        user: UserOutput;
+    };
 };
 
 export type UserLeftOutput = {
     type: OutputType.UserLeft;
-    userId: string;
+    payload: {
+        userId: string;
+    };
+};
+
+export type PostedOutput = {
+    type: OutputType.Posted;
+    payload: {
+        messageId: string;
+    };
 };
 
 export type UserPostedOutput = {
     type: OutputType.UserPosted;
-    message: MessageOutput;
+    payload: {
+        message: MessageOutput;
+    };
 };
 
 export type Output =
@@ -80,4 +118,5 @@ export type Output =
     JoinedOutput |
     UserJoinedOutput |
     UserLeftOutput |
+    PostedOutput |
     UserPostedOutput;

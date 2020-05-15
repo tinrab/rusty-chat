@@ -1,10 +1,14 @@
+import { OutputError, OutputResult } from '../api/types';
+import { Message } from '../feed/types';
+
 export type User = {
     id: string;
     name: string;
 };
 
 export type UserState = {
-    currentUser?: User;
+    currentUser: User | null;
+    joinError: OutputError | null;
 };
 
 export enum UserActionType {
@@ -19,7 +23,14 @@ export type JoinUserAction = {
 
 export type JoinedUserAction = {
     type: UserActionType.Joined;
-    payload: User;
+    payload: OutputResult<JoinedUserOk>;
+};
+
+export type JoinedUserOk = {
+    userId: string;
+    name: string;
+    others: User[];
+    messages: Message[];
 };
 
 export type UserAction = JoinUserAction | JoinedUserAction;
