@@ -8,8 +8,8 @@ export type UserState = {
 };
 
 export enum UserActionType {
-    Join = 'user.join',
-    Joined = 'user.joined',
+    Join = 'user/join',
+    Joined = 'user/joined',
 }
 
 export type JoinUserAction = {

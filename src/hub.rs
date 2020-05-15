@@ -66,7 +66,7 @@ impl Hub {
     async fn process(&self, input_parcel: InputParcel) {
         match input_parcel.input {
             Input::Join(input) => self.process_join(input_parcel.client_id, input).await,
-            Input::Post(input) => self.process_send(input_parcel.client_id, input).await,
+            Input::Post(input) => self.process_post(input_parcel.client_id, input).await,
         }
     }
 
@@ -128,7 +128,7 @@ impl Hub {
         .await;
     }
 
-    async fn process_send(&self, client_id: Uuid, input: PostInput) {
+    async fn process_post(&self, client_id: Uuid, input: PostInput) {
         // Verify that user exists
         let user = if let Some(user) = self.users.read().await.get(&client_id) {
             user.clone()
