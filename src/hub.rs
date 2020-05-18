@@ -19,7 +19,7 @@ use crate::proto::{
 };
 
 const OUTPUT_CHANNEL_SIZE: usize = 16;
-const ALIVE_INTERVAL: Duration = Duration::from_secs(5);
+const ALIVE_INTERVAL: Duration = Duration::from_secs(1005);
 const MAX_MESSAGE_BODY_LENGTH: usize = 256;
 lazy_static! {
     static ref USER_NAME_REGEX: Regex = Regex::new("[A-Za-z\\s]{4,24}").unwrap();
@@ -96,6 +96,7 @@ impl Hub {
         self.users.write().await.insert(client_id, user.clone());
 
         // Report success to user
+        let user_output = UserOutput::new(client_id, user_name);
         let other_users = self
             .users
             .read()
@@ -125,12 +126,16 @@ impl Hub {
             .collect();
         self.send_targeted(
             client_id,
-            Output::Joined(JoinedOutput::new(client_id, other_users, messages)),
+            Output::Joined(JoinedOutput::new(
+                user_output.clone(),
+                other_users,
+                messages,
+            )),
         );
         // Notify others that someone joined
         self.send_ignored(
             client_id,
-            Output::UserJoined(UserJoinedOutput::new(UserOutput::new(client_id, user_name))),
+            Output::UserJoined(UserJoinedOutput::new(user_output)),
         )
         .await;
     }
@@ -162,7 +167,7 @@ impl Hub {
         // Report post status
         self.send_targeted(
             client_id,
-            Output::Posted(PostedOutput::new(message_output.id)),
+            Output::Posted(PostedOutput::new(message_output.clone())),
         );
         // Notify everybody about new message
         self.send_ignored(
@@ -223,5 +228,71 @@ impl Hub {
 impl Default for Hub {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::runtime::Runtime;
+    use tokio::sync::mpsc;
+    use uuid::Uuid;
+
+    use crate::hub::Hub;
+    use crate::proto::{Input, InputParcel, JoinInput, Output, PostInput};
+
+    #[test]
+    fn join_and_post() {
+        let hub = Hub::new();
+        let (sender, mut receiver) = mpsc::unbounded_channel();
+        let mut subscription = hub.subscribe();
+
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async move {
+            let case = async {
+                let client_id = Uuid::new_v4();
+
+                // Join
+                sender
+                    .send(InputParcel::new(
+                        client_id,
+                        Input::Join(JoinInput {
+                            name: String::from("John"),
+                        }),
+                    ))
+                    .unwrap();
+                let output = subscription.recv().await.unwrap().output;
+                let user;
+                if let Output::Joined(joined) = output {
+                    assert_eq!(joined.user.name.as_str(), "John");
+                    user = joined.user;
+                } else {
+                    panic!("Expected Output::Joined got {:?}", output);
+                }
+
+                // Post message
+                sender
+                    .send(InputParcel::new(
+                        client_id,
+                        Input::Post(PostInput {
+                            body: String::from("Hello"),
+                        }),
+                    ))
+                    .unwrap();
+                let output = subscription.recv().await.unwrap().output;
+                if let Output::Posted(posted) = output {
+                    assert_eq!(posted.message.body, "Hello");
+                    assert_eq!(posted.message.user.id, user.id);
+                    assert_eq!(posted.message.user.name, user.name);
+                } else {
+                    panic!("Expected Output::Posted got {:?}", output);
+                }
+
+                return;
+            };
+            tokio::select! {
+              _ = hub.run(receiver) => {},
+              _ = case => {},
+            }
+        });
     }
 }

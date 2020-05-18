@@ -31,6 +31,7 @@ pub enum Output {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(tag = "code")]
 pub enum OutputError {
     #[serde(rename = "name-taken")]
     NameTaken,
@@ -97,7 +98,7 @@ pub struct MessageOutput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JoinedOutput {
-    pub user_id: Uuid,
+    pub user: UserOutput,
     pub others: Vec<UserOutput>,
     pub messages: Vec<MessageOutput>,
 }
@@ -114,10 +115,10 @@ pub struct UserLeftOutput {
     pub user_id: Uuid,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PostedOutput {
-    pub message_id: Uuid,
+    pub message: MessageOutput,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,9 +148,9 @@ impl MessageOutput {
 }
 
 impl JoinedOutput {
-    pub fn new(user_id: Uuid, others: Vec<UserOutput>, messages: Vec<MessageOutput>) -> Self {
+    pub fn new(user: UserOutput, others: Vec<UserOutput>, messages: Vec<MessageOutput>) -> Self {
         JoinedOutput {
-            user_id,
+            user,
             others,
             messages,
         }
@@ -169,8 +170,8 @@ impl UserLeftOutput {
 }
 
 impl PostedOutput {
-    pub fn new(message_id: Uuid) -> Self {
-        PostedOutput { message_id }
+    pub fn new(message: MessageOutput) -> Self {
+        PostedOutput { message }
     }
 }
 

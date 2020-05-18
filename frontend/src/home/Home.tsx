@@ -1,6 +1,6 @@
 import { Box, Button, TextField, Typography } from '@material-ui/core';
 import { createStyles, makeStyles, Theme } from '@material-ui/core/styles';
-import React, { ChangeEvent, useState } from 'react';
+import React, { ChangeEvent, FormEvent, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { OutputError } from '../api/types';
 import { AppState } from '../store';
@@ -22,7 +22,7 @@ const Home: React.FC = () => {
     const [state, setState] = useState<HomeState>({ name: '', nameValid: false });
     const dispatch = useDispatch();
 
-    let joinedErrorCode = useSelector((state: AppState) => state.user.joinError);
+    const joinedErrorCode = useSelector((state: AppState) => state.user.joinError);
     let joinedError = null;
     if (state.name.trim().length !== 0) {
         switch (joinedErrorCode) {
@@ -46,7 +46,8 @@ const Home: React.FC = () => {
         }));
     };
 
-    const handleJoin = () => {
+    const handleJoin = (e: FormEvent) => {
+        e.preventDefault();
         const name = state.name.trim();
         if (!isNameValid(name)) {
             return;
@@ -55,11 +56,12 @@ const Home: React.FC = () => {
     };
 
     return (
-        <Box display="flex" flexDirection="column" textAlign="center" flexGrow={1} mt={4}>
+        <Box display="flex" flexDirection="column" textAlign="center" flexGrow={1} pt={4}>
             <Typography variant="h3">
                 Welcome!
             </Typography>
-            <Box display="flex" justifyContent="center" alignItems="baseline" mt={2}>
+            <Box component="form" onSubmit={handleJoin} display="flex" justifyContent="center" alignItems="baseline"
+                 mt={2}>
                 <TextField label="Name" value={state.name} onChange={handleNameChange} error={!!joinedError}
                            helperText={joinedError}/>
                 <Button className={classes.joinButton} variant="contained" color="primary"
@@ -67,7 +69,6 @@ const Home: React.FC = () => {
                     Join
                 </Button>
             </Box>
-
         </Box>
     );
 };

@@ -19,10 +19,8 @@ export default function userReducer(
         } else {
             return {
                 ...state,
-                currentUser: {
-                    id: action.payload.userId,
-                    name: action.payload.name,
-                },
+                currentUser: action.payload.user,
+                joinError: null,
             };
         }
     }

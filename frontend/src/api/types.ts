@@ -1,6 +1,6 @@
 export enum ApiActionType {
-    Write = 'write',
-    Read = 'read',
+    Write = 'api/write',
+    Read = 'api/read',
 }
 
 export type WriteApiAction = {
@@ -68,7 +68,7 @@ export type MessageOutput = {
 
 export type ErrorOutput = {
     type: OutputType.Error;
-    payload: OutputError;
+    payload: { code: OutputError };
 };
 
 export type AliveOutput = {
@@ -78,7 +78,7 @@ export type AliveOutput = {
 export type JoinedOutput = {
     type: OutputType.Joined;
     payload: {
-        userId: string;
+        user: UserOutput;
         others: UserOutput[];
         messages: MessageOutput[];
     };
@@ -101,7 +101,7 @@ export type UserLeftOutput = {
 export type PostedOutput = {
     type: OutputType.Posted;
     payload: {
-        messageId: string;
+        message: MessageOutput;
     };
 };
 

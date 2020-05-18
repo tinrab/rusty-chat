@@ -1,13 +1,13 @@
 import { OutputError, OutputResult } from '../api/types';
-import { Message } from '../feed/types';
+import { MessageData } from '../feed/types';
 
-export type User = {
+export type UserData = {
     id: string;
     name: string;
 };
 
 export type UserState = {
-    currentUser: User | null;
+    currentUser: UserData | null;
     joinError: OutputError | null;
 };
 
@@ -23,14 +23,13 @@ export type JoinUserAction = {
 
 export type JoinedUserAction = {
     type: UserActionType.Joined;
-    payload: OutputResult<JoinedUserOk>;
+    payload: OutputResult<JoinedUserActionOk>;
 };
 
-export type JoinedUserOk = {
-    userId: string;
-    name: string;
-    others: User[];
-    messages: Message[];
+export type JoinedUserActionOk = {
+    user: UserData;
+    others: UserData[];
+    messages: MessageData[];
 };
 
 export type UserAction = JoinUserAction | JoinedUserAction;
