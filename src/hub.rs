@@ -19,37 +19,41 @@ use crate::proto::{
 };
 
 const OUTPUT_CHANNEL_SIZE: usize = 16;
-const ALIVE_INTERVAL: Duration = Duration::from_secs(1005);
 const MAX_MESSAGE_BODY_LENGTH: usize = 256;
 lazy_static! {
     static ref USER_NAME_REGEX: Regex = Regex::new("[A-Za-z\\s]{4,24}").unwrap();
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct HubOptions {
+    pub alive_interval: Option<Duration>,
+}
+
 pub struct Hub {
+    alive_interval: Option<Duration>,
     output_sender: broadcast::Sender<OutputParcel>,
     users: RwLock<HashMap<Uuid, User>>,
     feed: RwLock<Feed>,
 }
 
 impl Hub {
-    pub fn new() -> Self {
+    pub fn new(options: HubOptions) -> Self {
         let (output_sender, _) = broadcast::channel(OUTPUT_CHANNEL_SIZE);
         Hub {
+            alive_interval: options.alive_interval,
             output_sender,
             users: Default::default(),
             feed: Default::default(),
         }
     }
 
-    pub async fn run(&self, receiver: UnboundedReceiver<InputParcel>) -> Result<()> {
+    pub async fn run(&self, receiver: UnboundedReceiver<InputParcel>) {
         let ticking_alive = self.tick_alive();
         let processing = receiver.for_each(|input_parcel| self.process(input_parcel));
-
         tokio::select! {
-            result = ticking_alive => result,
-            result = processing => result,
+            _ = ticking_alive => {},
+            _ = processing => {},
         }
-        Ok(())
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<OutputParcel> {
@@ -178,7 +182,12 @@ impl Hub {
     }
 
     async fn tick_alive(&self) {
-        let mut interval = time::interval(ALIVE_INTERVAL);
+        let alive_interval = if let Some(alive_interval) = self.alive_interval {
+            alive_interval
+        } else {
+            return;
+        };
+        let mut interval = time::interval(alive_interval);
         loop {
             interval.tick().await;
             self.send(Output::Alive).await;
@@ -227,7 +236,7 @@ impl Hub {
 
 impl Default for Hub {
     fn default() -> Self {
-        Self::new()
+        Self::new(HubOptions::default())
     }
 }
 
@@ -237,13 +246,13 @@ mod tests {
     use tokio::sync::mpsc;
     use uuid::Uuid;
 
-    use crate::hub::Hub;
+    use crate::hub::{Hub, HubOptions};
     use crate::proto::{Input, InputParcel, JoinInput, Output, PostInput};
 
     #[test]
     fn join_and_post() {
-        let hub = Hub::new();
-        let (sender, mut receiver) = mpsc::unbounded_channel();
+        let hub = Hub::new(HubOptions::default());
+        let (sender, receiver) = mpsc::unbounded_channel();
         let mut subscription = hub.subscribe();
 
         let mut rt = Runtime::new().unwrap();
