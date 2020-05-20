@@ -9,7 +9,6 @@ use warp::ws::WebSocket;
 use warp::Filter;
 
 use crate::client::Client;
-
 use crate::hub::{Hub, HubOptions};
 use crate::proto::InputParcel;
 
@@ -46,10 +45,20 @@ impl Server {
                 },
             );
 
-        let serving = warp::serve(feed).run(([127, 0, 0, 1], self.port));
+        let shutdown = async {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("failed to install CTRL+C signal handler");
+        };
+        let (_, serving) =
+            warp::serve(feed).bind_with_graceful_shutdown(([127, 0, 0, 1], self.port), shutdown);
+
         let running_hub = self.hub.run(input_receiver);
 
-        tokio::join!(serving, running_hub);
+        tokio::select! {
+            _ = serving => {},
+            _ = running_hub => {},
+        }
     }
 
     async fn process_client(

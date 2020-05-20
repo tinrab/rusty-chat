@@ -2,7 +2,6 @@ use std::{error, result};
 
 use futures::stream::SplitStream;
 use futures::{future, Stream, StreamExt, TryStream, TryStreamExt};
-
 use uuid::Uuid;
 use warp::filters::ws::WebSocket;
 

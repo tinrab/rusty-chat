@@ -9,7 +9,6 @@ use tokio::sync::{broadcast, RwLock};
 use tokio::time;
 use uuid::Uuid;
 
-use crate::error::Result;
 use crate::model::feed::Feed;
 use crate::model::message::Message;
 use crate::model::user::User;
@@ -187,9 +186,8 @@ impl Hub {
         } else {
             return;
         };
-        let mut interval = time::interval(alive_interval);
         loop {
-            interval.tick().await;
+            time::delay_for(alive_interval).await;
             self.send(Output::Alive).await;
         }
     }
