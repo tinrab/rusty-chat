@@ -1,7 +1,5 @@
 use std::{error, fmt, io, result};
 
-use serde::export::Formatter;
-
 #[derive(Debug)]
 pub enum Error {
     System(String),
@@ -10,7 +8,7 @@ pub enum Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::System(err) => write!(f, "system error: {}", err),
             Error::Io(ref err) => write!(f, "IO error: {}", err),
