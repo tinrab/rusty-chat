@@ -1,16 +1,18 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures::{StreamExt, TryStreamExt};
 use log::{error, info};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::time::Duration;
 use warp::ws::WebSocket;
 use warp::Filter;
 
 use crate::client::Client;
 use crate::hub::{Hub, HubOptions};
 use crate::proto::InputParcel;
+
+const MAX_FRAME_SIZE: usize = 1 << 16;
 
 pub struct Server {
     port: u16,
@@ -28,6 +30,7 @@ impl Server {
     }
 
     pub async fn run(&self) {
+        println!("{:?}", MAX_FRAME_SIZE);
         let (input_sender, input_receiver) = mpsc::unbounded_channel::<InputParcel>();
         let hub = self.hub.clone();
 
@@ -39,9 +42,10 @@ impl Server {
                 move |ws: warp::ws::Ws,
                       input_sender: UnboundedSender<InputParcel>,
                       hub: Arc<Hub>| {
-                    ws.on_upgrade(move |web_socket| async move {
-                        tokio::spawn(Self::process_client(hub, web_socket, input_sender));
-                    })
+                    ws.max_frame_size(MAX_FRAME_SIZE)
+                        .on_upgrade(move |web_socket| async move {
+                            tokio::spawn(Self::process_client(hub, web_socket, input_sender));
+                        })
                 },
             );
 
