@@ -16,6 +16,7 @@ use crate::proto::{
     Input, InputParcel, JoinInput, JoinedOutput, MessageOutput, Output, OutputError, OutputParcel,
     PostInput, PostedOutput, UserJoinedOutput, UserLeftOutput, UserOutput, UserPostedOutput,
 };
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 const OUTPUT_CHANNEL_SIZE: usize = 16;
 const MAX_MESSAGE_BODY_LENGTH: usize = 256;
@@ -48,6 +49,7 @@ impl Hub {
 
     pub async fn run(&self, receiver: UnboundedReceiver<InputParcel>) {
         let ticking_alive = self.tick_alive();
+        let receiver = UnboundedReceiverStream::new(receiver);
         let processing = receiver.for_each(|input_parcel| self.process(input_parcel));
         tokio::select! {
             _ = ticking_alive => {},
@@ -187,7 +189,7 @@ impl Hub {
             return;
         };
         loop {
-            time::delay_for(alive_interval).await;
+            time::sleep(alive_interval).await;
             self.send(Output::Alive).await;
         }
     }
