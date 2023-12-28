@@ -11,6 +11,8 @@ use warp::Filter;
 use crate::client::Client;
 use crate::hub::{Hub, HubOptions};
 use crate::proto::InputParcel;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 const MAX_FRAME_SIZE: usize = 1 << 16;
 
@@ -71,6 +73,7 @@ impl Server {
         input_sender: UnboundedSender<InputParcel>,
     ) {
         let output_receiver = hub.subscribe();
+        let output_receiver = BroadcastStream::new(output_receiver);
         let (ws_sink, ws_stream) = web_socket.split();
         let client = Client::new();
 
@@ -84,9 +87,10 @@ impl Server {
             });
 
         let (tx, rx) = mpsc::unbounded_channel();
+        let rx = UnboundedReceiverStream::new(rx);
         tokio::spawn(rx.forward(ws_sink));
         let writing = client
-            .write_output(output_receiver.into_stream())
+            .write_output(output_receiver)
             .try_for_each(|message| async {
                 tx.send(Ok(message)).unwrap();
                 Ok(())

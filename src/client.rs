@@ -2,8 +2,8 @@ use std::time::Duration;
 use std::{error, result};
 
 use futures::stream::SplitStream;
-use futures::{future, Stream, StreamExt, TryStream, TryStreamExt};
-use tokio::time;
+use futures::{future, Stream, TryStream, TryStreamExt};
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 use warp::filters::ws::WebSocket;
 
@@ -25,26 +25,24 @@ impl Client {
         stream: SplitStream<WebSocket>,
     ) -> impl Stream<Item = Result<InputParcel>> {
         let client_id = self.id;
-        time::throttle(
-            Duration::from_millis(300),
-            stream
-                // Take only text messages
-                .take_while(|message| {
-                    future::ready(if let Ok(message) = message {
-                        message.is_text()
-                    } else {
-                        false
-                    })
-                })
-                // Deserialize JSON messages into proto::Input
-                .map(move |message| match message {
-                    Err(err) => Err(Error::System(err.to_string())),
-                    Ok(message) => {
-                        let input = serde_json::from_str(message.to_str().unwrap())?;
-                        Ok(InputParcel::new(client_id, input))
-                    }
-                }),
-        )
+        stream
+            // Take only text messages
+            .take_while(|message| {
+                if let Ok(message) = message {
+                    message.is_text()
+                } else {
+                    false
+                }
+            })
+            // Deserialize JSON messages into proto::Input
+            .map(move |message| match message {
+                Err(err) => Err(Error::System(err.to_string())),
+                Ok(message) => {
+                    let input = serde_json::from_str(message.to_str().unwrap())?;
+                    Ok(InputParcel::new(client_id, input))
+                }
+            })
+            .throttle(Duration::from_millis(300))
     }
 
     pub fn write_output<S, E>(&self, stream: S) -> impl Stream<Item = Result<warp::ws::Message>>
